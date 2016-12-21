@@ -20,6 +20,7 @@ package com.kohlschutter.boilerpipe.sax;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
@@ -32,6 +33,8 @@ import java.util.zip.GZIPInputStream;
  * A very simple HTTP/HTML fetcher, really just for demo purposes.
  */
 public class HTMLFetcher {
+  private static final String USER_AGENT = "Mozilla";
+
   private HTMLFetcher() {
   }
 
@@ -45,7 +48,7 @@ public class HTMLFetcher {
    * @throws IOException
    */
   public static HTMLDocument fetch(final URL url) throws IOException {
-    final URLConnection conn = url.openConnection();
+    HttpURLConnection conn = tryRedirect(url);
     final String ct = conn.getContentType();
 
     if (ct == null || !(ct.equals("text/html") || ct.startsWith("text/html;"))) {
@@ -87,5 +90,26 @@ public class HTMLFetcher {
     final byte[] data = bos.toByteArray();
 
     return new HTMLDocument(data, cs);
+  }
+
+  private static HttpURLConnection tryRedirect(URL url) throws IOException {
+    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+    conn.addRequestProperty("User-Agent", USER_AGENT);
+
+    int status = conn.getResponseCode();
+    int maxRedirects = 3;
+    int i = 0;
+    while (isRedirectStatus(status) && i++ < maxRedirects) {
+      String newUrl = conn.getHeaderField("Location");
+      conn = (HttpURLConnection) new URL(newUrl).openConnection();
+      status = conn.getResponseCode();
+    }
+    return conn;
+  }
+
+  private static boolean isRedirectStatus(int status) {
+    return status == HttpURLConnection.HTTP_MOVED_TEMP
+              || status == HttpURLConnection.HTTP_MOVED_PERM
+              || status == HttpURLConnection.HTTP_SEE_OTHER;
   }
 }
